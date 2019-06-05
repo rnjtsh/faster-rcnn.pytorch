@@ -9,7 +9,8 @@ data/*
 # refactoring this file!
 
 ## PyTorch
-
+test_rcnn.sh
+train_rcnn.sh
 .mypy_cache
 *.pyc
 */*.pyc

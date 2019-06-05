@@ -112,18 +112,11 @@ if __name__ == '__main__':
       args.imdb_name = "voc_2007_trainval+voc_2012_trainval"
       args.imdbval_name = "voc_2007_test"
       args.set_cfgs = ['ANCHOR_SCALES', '[8, 16, 32]', 'ANCHOR_RATIOS', '[0.5,1,2]']
-  elif args.dataset == "coco":
-      args.imdb_name = "coco_2014_train+coco_2014_valminusminival"
-      args.imdbval_name = "coco_2014_minival"
-      args.set_cfgs = ['ANCHOR_SCALES', '[4, 8, 16, 32]', 'ANCHOR_RATIOS', '[0.5,1,2]']
-  elif args.dataset == "imagenet":
-      args.imdb_name = "imagenet_train"
-      args.imdbval_name = "imagenet_val"
-      args.set_cfgs = ['ANCHOR_SCALES', '[8, 16, 32]', 'ANCHOR_RATIOS', '[0.5,1,2]']
-  elif args.dataset == "vg":
-      args.imdb_name = "vg_150-50-50_minitrain"
-      args.imdbval_name = "vg_150-50-50_minival"
-      args.set_cfgs = ['ANCHOR_SCALES', '[4, 8, 16, 32]', 'ANCHOR_RATIOS', '[0.5,1,2]']
+  elif args.dataset == "GOD":
+      args.imdb_name = "GOD_2019_train"
+      args.imdbval_name = "GOD_2019_test"
+      args.set_cfgs = ['ANCHOR_SCALES', '[4, 8, 16, 32, 64, 128, 256, 512]',
+                       'ANCHOR_RATIOS', '[1,2,3,4,5]']
 
   args.cfg_file = "cfgs/{}_ls.yml".format(args.net) if args.large_scale else "cfgs/{}.yml".format(args.net)
 
@@ -149,7 +142,9 @@ if __name__ == '__main__':
 
   # initilize the network here.
   if args.net == 'vgg16':
-    fasterRCNN = vgg16(imdb.classes, pretrained=False, class_agnostic=args.class_agnostic)
+    fasterRCNN = vgg16(imdb.classes, 16, pretrained=True, class_agnostic=args.class_agnostic)
+  elif args.net == 'vgg19':
+    fasterRCNN = vgg16(imdb.classes, 19, pretrained=True, class_agnostic=args.class_agnostic)
   elif args.net == 'res101':
     fasterRCNN = resnet(imdb.classes, 101, pretrained=False, class_agnostic=args.class_agnostic)
   elif args.net == 'res50':
@@ -202,13 +197,15 @@ if __name__ == '__main__':
 
   if vis:
     thresh = 0.05
+    if os.path.exists('./visualised_output') == False:
+          os.mkdir('./visualised_output')
   else:
     thresh = 0.0
 
   save_name = 'faster_rcnn_10'
   num_images = len(imdb.image_index)
   all_boxes = [[[] for _ in xrange(num_images)]
-               for _ in xrange(imdb.num_classes)]
+               for _ in xrange(imdb.num_classes + 1)]
 
   output_dir = get_output_dir(imdb, save_name)
   dataset = roibatchLoader(roidb, ratio_list, ratio_index, 1, \
@@ -288,7 +285,7 @@ if __name__ == '__main__':
             keep = nms(cls_dets, cfg.TEST.NMS)
             cls_dets = cls_dets[keep.view(-1).long()]
             if vis:
-              im2show = vis_detections(im2show, imdb.classes[j], cls_dets.cpu().numpy(), 0.3)
+              im2show = vis_detections(im2show, imdb.classes[j], j, cls_dets.cpu().numpy(), 0.3)
             all_boxes[j][i] = cls_dets.cpu().numpy()
           else:
             all_boxes[j][i] = empty_array
@@ -311,11 +308,26 @@ if __name__ == '__main__':
       sys.stdout.flush()
 
       if vis:
-          cv2.imwrite('result.png', im2show)
-          pdb.set_trace()
+          cv2.imwrite('./visualised_output/' + imdb.image_path_at(i).split('/')[-1], im2show)
+          # pdb.set_trace()
           #cv2.imshow('test', im2show)
           #cv2.waitKey(0)
-
+      all_boxes[imdb.num_classes][i] = imdb.image_path_at(i).split('/')[-1]
+  '''
+  # Discard all very small boxes
+  for i in range(len(all_boxes[1])):
+    for cls in range(1,4):
+      lst = all_boxes[cls][i]
+      indx_to_be_removed = []
+      for x in range(len(lst)):
+        xmax = int(lst[x][2])
+        xmin = int(lst[x][0])
+        ymax = int(lst[x][3])
+        ymin = int(lst[x][1])
+        if xmax - xmin <= 30 or ymax-ymin <= 30:
+          indx_to_be_removed.append(x)
+      all_boxes[cls][i] = [i for j, i in enumerate(lst) if j not in indx_to_be_removed]
+  '''
   with open(det_file, 'wb') as f:
       pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
